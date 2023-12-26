@@ -10,7 +10,6 @@
 #include "glaze/json/json_ptr.hpp"
 #include "glaze/json/read.hpp"
 #include "glaze/json/write.hpp"
-#include "glaze/thread/threadpool.hpp"
 #include "glaze/util/expected.hpp"
 #include "glaze/util/type_traits.hpp"
 
@@ -223,27 +222,29 @@ namespace glz
       // Takes a state generator and a function on which to invoke the state
       void run_study(generator auto& g, auto&& f)
       {
-         glz::pool pool{};
+         // glz::pool pool{};
          size_t job_num = 0;
          while (!g.done()) {
             // generate mutates
             // TODO: maybe save states and mutate them across threads
-            pool.emplace_back([=, state = g.generate()](const auto) { f(std::move(state), job_num); });
-            ++job_num;
+            // pool.emplace_back([=, state = g.generate()](const auto) { f(std::move(state), job_num); });
+            // ++job_num;
+            f(g.generate(), job_num++);
          }
-         pool.wait();
+         // pool.wait();
       }
 
       template <class T>
          requires range<T>
       void run_study(T& states, auto&& f)
       {
-         glz::pool pool{};
+         // glz::pool pool{};
          const auto n = states.size();
          for (size_t i = 0; i < n; ++i) {
-            pool.emplace_back([=, state = states[i]](const auto) { f(std::move(state), i); });
+            // pool.emplace_back([=, state = states[i]](const auto) { f(std::move(state), i); });
+            f(states[i], i);
          }
-         pool.wait();
+         // pool.wait();
       }
 
       struct random_param

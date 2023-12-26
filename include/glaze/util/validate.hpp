@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <optional>
 #include <string>
+#include "glaze/util/ffmt.hpp"
 
 namespace glz
 {
@@ -76,29 +77,29 @@ namespace glz
       {
          std::string s{};
 
-         if (!filename.empty()) {
-            s += filename;
-            s += ":";
-         }
+         // if (!filename.empty()) {
+         //    s += filename;
+         //    s += ":";
+         // }
 
-         s += std::to_string(info.line) + ":" + std::to_string(info.column) + ": ";
-         s += error;
-         s += "\n";
-         if (info.front_truncation) {
-            if (info.rear_truncation) {
-               s += "..." + info.context + "...\n   ";
-            }
-            else {
-               s += "..." + info.context + "\n   ";
-            }
-         }
-         else {
-            s += "   " + info.context + "\n   ";
-         }
-         for (size_t i = 0; i < info.column - 1 - info.front_truncation; ++i) {
-            s += " ";
-         }
-         s += "^\n";
+         // s += std::to_string(info.line) + ":" + std::to_string(info.column) + ": ";
+         // s += error;
+         // s += "\n";
+         // if (info.front_truncation) {
+         //    if (info.rear_truncation) {
+         //       s += "..." + info.context + "...\n   ";
+         //    }
+         //    else {
+         //       s += "..." + info.context + "\n   ";
+         //    }
+         // }
+         // else {
+         //    s += "   " + info.context + "\n   ";
+         // }
+         // for (size_t i = 0; i < info.column - 1 - info.front_truncation; ++i) {
+         //    s += " ";
+         // }
+         // s += "^\n";
 
          // TODO: use std::format when available
          /*
@@ -110,6 +111,15 @@ namespace glz
          fmt::format_to(it, FMT_COMPILE("{}:{}: {}\n"), info.line, info.column, error);
          fmt::format_to(it, FMT_COMPILE("   {}\n   "), info.context);
          fmt::format_to(it, FMT_COMPILE("{: <{}}^\n"), "", info.column - 1);*/
+
+         if (!filename.empty()) {
+            s += vermils::ffmt::format("{}:", filename);
+         }
+
+         s += vermils::ffmt::format("{}:{}: {}\n", info.line, info.column, error);
+         s += vermils::ffmt::format("   {}\n   ", info.context);
+         s += vermils::ffmt::format("{:<}", info.column - 1);
+
          return s;
       }
    } // namespace detail
