@@ -1,19 +1,16 @@
 # Glaze
 One of the fastest JSON libraries in the world. Glaze reads and writes from object memory, simplifying interfaces and offering incredible performance.
 
-Glaze isn't just a JSON library. Glaze also supports:
+Glaze also supports:
 
 - [BEVE](https://github.com/stephenberry/beve) (binary efficient versatile encoding)
 - [CSV](https://github.com/stephenberry/glaze/blob/main/docs/csv.md) (comma separated value)
 
-## Now with pure compile time reflection for MSVC, Clang, and GCC!
+## With compile time reflection for MSVC, Clang, and GCC!
 
-- For aggregate initializable structs
-- Compile time reflection so we still get perfect hashing!
+- Serialize aggregate initializable structs without writing any metadata or using any macros!
 
 ## Highlights
-
-Glaze requires C++20, using concepts for cleaner code and more helpful errors.
 
 - Pure, compile time reflection for structs
 - Standard C++ library support
@@ -81,11 +78,12 @@ Binary message size: 611 bytes
 
 ## Compiler/System Support
 
+- Requires C++20
+- Only designed and tested for 64bit little-endian systems
+
 [Actions](https://github.com/stephenberry/glaze/actions) automatically build and test with [Clang](https://clang.llvm.org) (14+), [MSVC](https://visualstudio.microsoft.com/vs/features/cplusplus/) (2022), and [GCC](https://gcc.gnu.org) (11+) on apple, windows, and linux.
 
 ![clang build](https://github.com/stephenberry/glaze/actions/workflows/clang.yml/badge.svg) ![gcc build](https://github.com/stephenberry/glaze/actions/workflows/gcc.yml/badge.svg) ![msvc build](https://github.com/stephenberry/glaze/actions/workflows/msvc_2022.yml/badge.svg) 
-
-*Glaze is only designed and tested for 64bit little-endian systems.*
 
 ## Example
 

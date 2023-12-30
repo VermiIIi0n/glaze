@@ -535,7 +535,7 @@ namespace glz
             using V = std::decay_t<T>;
             static constexpr auto N = [] {
                if constexpr (reflectable<T>) {
-                  return std::tuple_size_v<decltype(to_tuple(std::declval<T>()))>;
+                  return count_members<T>;
                }
                else {
                   return std::tuple_size_v<meta_t<V>>;
@@ -546,7 +546,7 @@ namespace glz
 
             if constexpr (reflectable<T>) {
                static constexpr auto members = member_names<T>;
-               auto t = to_tuple(value);
+               const auto t = to_tuple(value);
                for_each<N>([&](auto I) {
                   write<binary>::no_header<Opts>(get<I>(members), ctx, args...);
                   write<binary>::op<Opts>(std::get<I>(t), ctx, args...);

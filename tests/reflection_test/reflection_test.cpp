@@ -177,6 +177,15 @@ suite user_types = [] {
       if (b.has_value()) {
          expect(b.value().get() == "stuff");
       }
+
+      std::string out;
+      expect(glz::seek([&](auto& value) { glz::write_json(value, out); }, obj, "/d"));
+
+      expect(out == "2");
+
+      expect(glz::seek([&](auto& value) { glz::write_json(value, out); }, obj, "/thing_ptr/b"));
+
+      expect(out == R"("stuff")");
    };
 };
 
@@ -220,7 +229,7 @@ struct string_view_member_count
    int five{};
 };
 
-static_assert(glz::detail::count_members<string_view_member_count>() == 5);
+static_assert(glz::detail::count_members<string_view_member_count> == 5);
 
 int main()
 { // Explicitly run registered test suites and report errors

@@ -26,7 +26,7 @@ namespace glz
          using V = decltype(to_tuple(std::declval<T>()));
          constexpr auto n = std::tuple_size_v<V>;
          [[maybe_unused]] constexpr auto members = member_names<T>;
-         static_assert(count_members<T>() == n);
+         static_assert(count_members<T> == n);
 
          using value_t = reflection_value_tuple_variant_t<V>;
 
@@ -53,7 +53,7 @@ namespace glz
             return micro_map2<value_t, named_member<T, I>::value...>{
                std::pair<sv, value_t>{get<I>(members), std::add_pointer_t<std::tuple_element_t<I, V>>{}}...};
          }
-         else if constexpr (n < 128) // don't even attempt a first character hash if we have too many keys
+         else if constexpr (n < 64) // don't even attempt a first character hash if we have too many keys
          {
             constexpr auto front_desc = single_char_hash<n>(member_names<T>);
 
@@ -82,10 +82,54 @@ namespace glz
       constexpr auto make_map()
          requires(!glaze_t<T> && !array_t<T> && std::is_aggregate_v<std::remove_cvref_t<T>>)
       {
-         using V = decltype(to_tuple(std::declval<T>()));
-
-         constexpr auto indices = std::make_index_sequence<std::tuple_size_v<V>>{};
+         constexpr auto indices = std::make_index_sequence<count_members<T>>{};
          return make_reflection_map_impl<std::decay_t<T>, use_hash_comparison>(indices);
+      }
+
+      template <reflectable T>
+      constexpr void populate_map(T&& value, auto& cmap) noexcept
+      {
+         // we have to populate the pointers in the reflection map from the structured binding
+         auto t = to_tuple(std::forward<T>(value));
+         for_each<count_members<T>>([&](auto I) {
+            std::get<std::add_pointer_t<std::decay_t<decltype(std::get<I>(t))>>>(std::get<I>(cmap.items).second) =
+               &std::get<I>(t);
+         });
+      }
+
+      template <class Tuple>
+      struct tuple_ptr;
+
+      template <class... Ts>
+      struct tuple_ptr<std::tuple<Ts...>>
+      {
+         using type = std::tuple<std::add_pointer_t<Ts>...>;
+      };
+
+      template <class Tuple>
+      using tuple_ptr_t = typename tuple_ptr<Tuple>::type;
+
+      // This is needed to hack a fix for MSVC evaluating wrong if constexpr branches
+      template <class T>
+         requires(!reflectable<T>)
+      constexpr auto make_tuple_from_struct()
+      {
+         return std::tuple{};
+      }
+
+      template <reflectable T>
+      constexpr auto make_tuple_from_struct()
+      {
+         using V = decltype(to_tuple(std::declval<T>()));
+         return typename tuple_ptr<V>::type{};
+      }
+
+      template <reflectable T>
+      constexpr void populate_tuple_ptr(T&& value, auto& tuple_of_ptrs) noexcept
+      {
+         // we have to populate the pointers in the reflection tuple from the structured binding
+         auto t = to_tuple(std::forward<T>(value));
+         for_each<count_members<T>>([&](auto I) { std::get<I>(tuple_of_ptrs) = &std::get<I>(t); });
       }
    }
 }

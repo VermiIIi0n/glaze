@@ -916,8 +916,7 @@ namespace glz
                }
 
                // skip
-               if constexpr (std::is_same_v<val_t, includer<V>> || std::is_same_v<val_t, hidden> ||
-                             std::same_as<val_t, skip>) {
+               if constexpr (is_includer<val_t> || std::is_same_v<val_t, hidden> || std::same_as<val_t, skip>) {
                   return;
                }
                else {
@@ -1043,7 +1042,9 @@ namespace glz
 
             [[maybe_unused]] decltype(auto) t = [&] {
                if constexpr (reflectable<T>) {
-                  return to_tuple(value);
+                  static constinit auto tuple_of_ptrs = make_tuple_from_struct<T>();
+                  populate_tuple_ptr(value, tuple_of_ptrs);
+                  return tuple_of_ptrs;
                }
                else {
                   return nullptr;
@@ -1086,7 +1087,7 @@ namespace glz
                }
 
                // skip file_include
-               if constexpr (std::is_same_v<val_t, includer<std::decay_t<V>>>) {
+               if constexpr (is_includer<val_t>) {
                   return;
                }
                else if constexpr (std::is_same_v<val_t, hidden> || std::same_as<val_t, skip>) {

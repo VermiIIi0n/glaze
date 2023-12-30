@@ -23,6 +23,7 @@
 #include "boost/ut.hpp"
 #include "glaze/api/impl.hpp"
 #include "glaze/core/macros.hpp"
+#include "glaze/file/hostname_include.hpp"
 #include "glaze/json/json_ptr.hpp"
 #include "glaze/json/prettify.hpp"
 #include "glaze/json/ptr.hpp"
@@ -512,8 +513,8 @@ suite container_types = [] {
       expect(vec == vec2);
    };
    "vector uint64_t roundtrip"_test = [] {
-      std::uniform_int_distribution<uint64_t> dist(std::numeric_limits<uint64_t>::min(),
-                                                   std::numeric_limits<uint64_t>::max());
+      std::uniform_int_distribution<uint64_t> dist((std::numeric_limits<uint64_t>::min)(),
+                                                   (std::numeric_limits<uint64_t>::max)());
       std::mt19937 gen{};
       std::vector<uint64_t> vec(100);
       for (auto& item : vec) item = dist(gen);
@@ -1205,55 +1206,55 @@ suite read_tests = [] {
    "Read integral types"_test = [] {
       {
          std::string s = "true";
-         bool v;
+         bool v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v);
       }
       {
          std::string s = "1";
-         short v;
+         short v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         int v;
+         int v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         long v;
+         long v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         long long v;
+         long long v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         unsigned short v;
+         unsigned short v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         unsigned int v;
+         unsigned int v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         unsigned long v;
+         unsigned long v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
       {
          std::string s = "1";
-         unsigned long long v;
+         unsigned long long v{};
          expect(glz::read_json(v, s) == glz::error_code::none);
          expect(v == 1);
       }
@@ -4321,7 +4322,7 @@ struct Sample
 
 suite invalid_keys = [] {
    "invalid_keys"_test = [] {
-      std::string test_str = {"{\"a\":1,\"bbbbbb\":\"0\",\"c\":\"Hello World\",\"d\":{\"e\":\"123\"} }"};
+      std::string test_str = R"({"a":1,"bbbbbb":"0","c":"Hello World","d":{"e":"123"} })";
       auto s = Sample{};
 
       expect(glz::read<glz::opts{.error_on_unknown_keys = true}>(s, test_str) != glz::error_code::none);
@@ -6429,6 +6430,48 @@ suite custom_object_variant_test = [] {
 
       expect(data == glz::write<prettify>(objects));
    };
+};
+
+struct hostname_include_struct
+{
+   std::string str = "Hello";
+   int i = 55;
+};
+
+template <>
+struct glz::meta<hostname_include_struct>
+{
+   using T = hostname_include_struct;
+   static constexpr auto value = object("#hostname_include", glz::hostname_include{}, "str", &T::str, "i", &T::i);
+};
+
+suite hostname_include_test = [] {
+   hostname_include_struct obj{};
+
+   glz::context ctx{};
+   const auto hostname = glz::detail::get_hostname(ctx);
+
+   std::string file_name = "../{}_config.json";
+   glz::detail::replace_first_braces(file_name, hostname);
+
+   expect(glz::write_file_json(obj, file_name, std::string{}) == glz::error_code::none);
+
+   obj.str = "";
+   obj.i = 0;
+
+   std::string s = R"({"#hostname_include": "../{}_config.json", "i": 100})";
+   const auto ec = glz::read_json(obj, s);
+   expect(ec == glz::error_code::none) << glz::format_error(ec, s);
+
+   expect(obj.str == "Hello") << obj.str;
+   expect(obj.i == 100) << obj.i;
+
+   obj.str = "";
+
+   std::string buffer{};
+   glz::read_file_json(obj, file_name, buffer);
+   expect(obj.str == "Hello") << obj.str;
+   expect(obj.i == 55) << obj.i;
 };
 
 int main()

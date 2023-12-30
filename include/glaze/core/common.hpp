@@ -128,6 +128,8 @@ namespace glz
    struct includer
    {
       T& value;
+
+      static constexpr auto glaze_includer = true;
    };
 
    template <class T>
@@ -140,7 +142,12 @@ namespace glz
    struct file_include
    {
       constexpr decltype(auto) operator()(auto&& value) const { return includer<std::decay_t<decltype(value)>>{value}; }
+
+      static constexpr auto glaze_includer = true;
    };
+
+   template <class T>
+   concept is_includer = requires(T t) { T::glaze_includer; };
 
    template <class T>
    concept range = requires(T& t) {
@@ -841,7 +848,7 @@ namespace glz
          for_each<N>([&](auto I) {
             using V = std::decay_t<std::variant_alternative_t<I, T>>;
             if constexpr (reflectable<V>) {
-               res += count_members<V>();
+               res += count_members<V>;
             }
             else {
                res += std::tuple_size_v<meta_t<V>>;
@@ -1127,7 +1134,8 @@ struct glz::meta<glz::error_code>
                 "elements_not_convertible_to_design", glz::error_code::elements_not_convertible_to_design, //
                 "unknown_distribution", glz::error_code::unknown_distribution, //
                 "invalid_distribution_elements", glz::error_code::invalid_distribution_elements, //
-                "missing_key", glz::error_code::missing_key //
+                "missing_key", glz::error_code::missing_key, //
+                "hostname_failure", glz::error_code::hostname_failure //
       );
 };
 
@@ -1198,7 +1206,7 @@ namespace glz::detail
 
       static constexpr auto N = [] {
          if constexpr (reflectable<T>) {
-            return std::tuple_size_v<decltype(to_tuple(std::declval<T>()))>;
+            return count_members<T>;
          }
          else {
             return std::tuple_size_v<meta_t<V>>;
@@ -1215,7 +1223,7 @@ namespace glz::detail
             }
 
             // skip file_include
-            if constexpr (std::is_same_v<val_t, includer<std::decay_t<V>>>) {
+            if constexpr (is_includer<val_t>) {
                return false;
             }
             else if constexpr (std::is_same_v<val_t, hidden> || std::same_as<val_t, skip>) {

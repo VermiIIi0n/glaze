@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+
+#include "glaze/util/type_traits.hpp"
 
 namespace glz
 {
@@ -25,6 +28,13 @@ namespace glz
          template <class T>
             requires(!std::same_as<T, const char*> && !std::same_as<T, std::nullptr_t>)
          [[maybe_unused]] constexpr operator T();
+
+         template <class T>
+            requires(is_specialization_v<T, std::optional>)
+         [[maybe_unused]] constexpr operator T()
+         {
+            return std::nullopt;
+         }
 #else
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
@@ -39,17 +49,17 @@ namespace glz
 
       template <class T, class... Args>
          requires(std::is_aggregate_v<std::remove_cvref_t<T>>)
-      consteval auto count_members()
-      {
-         if constexpr (requires { T{{Args{}}..., {any_t{}}}; } == false) {
+      inline constexpr auto count_members = [] {
+         using V = std::remove_cvref_t<T>;
+         if constexpr (requires { V{{Args{}}..., {any_t{}}}; } == false) {
             return sizeof...(Args);
          }
          else {
-            return count_members<T, Args..., any_t>();
+            return count_members<V, Args..., any_t>;
          }
-      }
+      }();
 
-      template <class T, size_t N = count_members<std::decay_t<T>>()>
+      template <class T, size_t N = count_members<T>>
          requires(N <= 128)
       constexpr decltype(auto) to_tuple(T&& t)
       {

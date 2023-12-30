@@ -67,7 +67,7 @@ namespace glz
                      return;
                   }
 
-                  if (i > std::numeric_limits<V>::max()) [[unlikely]] {
+                  if (i > (std::numeric_limits<V>::max)()) [[unlikely]] {
                      ctx.error = error_code::parse_number_failure;
                      return;
                   }
@@ -86,7 +86,7 @@ namespace glz
                      return;
                   }
 
-                  if (i > std::numeric_limits<V>::max()) [[unlikely]] {
+                  if (i > (std::numeric_limits<V>::max)()) [[unlikely]] {
                      ctx.error = error_code::parse_number_failure;
                      return;
                   }
@@ -366,7 +366,7 @@ namespace glz
          {
             static constexpr auto num_members = [] {
                if constexpr (reflectable<T>) {
-                  return std::tuple_size_v<decltype(to_tuple(std::declval<T>()))>;
+                  return count_members<T>;
                }
                else {
                   return std::tuple_size_v<meta_t<T>>;
@@ -395,7 +395,7 @@ namespace glz
                   goto_delim<','>(it, end);
                   sv key{start, static_cast<size_t>(it - start)};
 
-                  size_t csv_index;
+                  size_t csv_index{};
 
                   const auto brace_pos = key.find('[');
                   if (brace_pos != sv::npos) {
@@ -403,13 +403,16 @@ namespace glz
                      const auto index = key.substr(brace_pos + 1, close_brace - (brace_pos + 1));
                      key = key.substr(0, brace_pos);
                      const auto [ptr, ec] = std::from_chars(index.data(), index.data() + index.size(), csv_index);
-                     if (ec != std::errc()) {
+                     if (ec != std::errc()) [[unlikely]] {
                         ctx.error = error_code::syntax_error;
                         return;
                      }
                   }
 
                   match<','>(ctx, it);
+                  if (bool(ctx.error)) [[unlikely]] {
+                     return;
+                  }
 
                   const auto& member_it = frozen_map.find(key);
 
@@ -432,11 +435,14 @@ namespace glz
                                     ++it;
                                     break;
                                  }
+                                 else if (it == end) {
+                                    return;
+                                 }
 
-                                 if (*it == ',') {
+                                 if (*it == ',') [[likely]] {
                                     ++it;
                                  }
-                                 else {
+                                 else [[unlikely]] {
                                     ctx.error = error_code::syntax_error;
                                     return;
                                  }
@@ -453,10 +459,10 @@ namespace glz
                                     break;
                                  }
 
-                                 if (*it == ',') {
+                                 if (*it == ',') [[likely]] {
                                     ++it;
                                  }
-                                 else {
+                                 else [[unlikely]] {
                                     ctx.error = error_code::syntax_error;
                                     return;
                                  }
@@ -464,6 +470,10 @@ namespace glz
                            }
                         },
                         member_it->second);
+
+                     if (bool(ctx.error)) [[unlikely]] {
+                        return;
+                     }
                   }
                   else [[unlikely]] {
                      ctx.error = error_code::unknown_key;
@@ -475,14 +485,14 @@ namespace glz
             {
                const auto keys = read_column_wise_keys(ctx, it, end);
 
-               if (bool(ctx.error)) {
+               if (bool(ctx.error)) [[unlikely]] {
                   return;
                }
 
-               if (*it == '\n') {
+               if (*it == '\n') [[likely]] {
                   ++it; // skip new line
                }
-               else {
+               else [[unlikely]] {
                   ctx.error = error_code::syntax_error;
                   return;
                }
@@ -535,13 +545,13 @@ namespace glz
    }
 
    template <uint32_t layout = rowwise, class T, class Buffer>
-   inline auto read_csv(T&& value, Buffer&& buffer) noexcept
+   [[nodiscard]] inline auto read_csv(T&& value, Buffer&& buffer) noexcept
    {
       return read<opts{.format = csv, .layout = layout}>(value, std::forward<Buffer>(buffer));
    }
 
    template <uint32_t layout = rowwise, class T, class Buffer>
-   inline auto read_csv(Buffer&& buffer) noexcept
+   [[nodiscard]] inline auto read_csv(Buffer&& buffer) noexcept
    {
       T value{};
       read<opts{.format = csv, .layout = rowwise}>(value, std::forward<Buffer>(buffer));
@@ -549,7 +559,7 @@ namespace glz
    }
 
    template <uint32_t layout = rowwise, class T>
-   inline parse_error read_file_csv(T& value, const sv file_name)
+   [[nodiscard]] inline parse_error read_file_csv(T& value, const sv file_name)
    {
       context ctx{};
       ctx.current_file = file_name;
