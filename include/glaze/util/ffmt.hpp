@@ -21,7 +21,7 @@ namespace vermils
         std::string format(const std::string_view src, T &&...args);
 
         template <typename... T>
-        std::string format(const std::size_t maxsize, const std::string_view src, T &&...args);
+        std::string format(std::size_t maxsize, const std::string_view src, T &&...args);
     }
 }
 
@@ -605,7 +605,7 @@ namespace vermils
         };
 
         using HolderContainer = std::vector<Placeholder>;
-        using StrContainer = string[];
+        using StrContainer = std::vector<std::string>;
 
         /**
          * @brief Function that find all {} and parse arguments in it into Placeholder
@@ -839,7 +839,6 @@ namespace vermils
 
         template <typename T>
         inline constexpr string stringify(T &&arg, const Placeholder &p)
-            // requires(!std::floating_point<T> && !std::integral<T>)
             requires(!std::floating_point<std::remove_cv_t<std::remove_reference_t<T>>> &&
                      !std::integral<std::remove_cv_t<std::remove_reference_t<T>>>)
         {
@@ -992,8 +991,8 @@ namespace vermils
                 s += itostr(arg);
                 break;
             case Hex:
-                size = std::max<size_t>(sizeof(T) * 2 + 1, p.padding);
-                s.reserve(size);
+                auto est_size = std::max<size_t>(sizeof(T) * 2 + 1, p.padding);
+                s.reserve(est_size);
 
                 if (!nonneg)
                 {
@@ -1019,8 +1018,8 @@ namespace vermils
             }
             case Pointer:
             {
-                size = std::max<size_t>(sizeof(T) * 2, p.padding);
-                s.reserve(size);
+                auto est_size = std::max<size_t>(sizeof(T) * 2, p.padding);
+                s.reserve(est_size);
                 size = sizeof(T);
                 while (size--)
                 {
@@ -1031,9 +1030,8 @@ namespace vermils
             }
             case Octal:
             {
-                bool allzero = true;
-                size = std::max<size_t>(sizeof(T) * 3 + 1, p.padding);
-                s.reserve(size);
+                auto est_size = std::max<size_t>(sizeof(T) * 8 / 3 + 1, p.padding);
+                s.reserve(est_size);
 
                 if (!nonneg)
                 {
@@ -1047,17 +1045,13 @@ namespace vermils
                     s.push_back('0');
                 else
                 {
-                    size = sizeof(T) * 8;
-                    while (size >= 3)
-                    {
-                        auto digit = (arg >> (size -= 3)) & 0x7;
-                        if (!digit && allzero)
-                            continue;
-                        allzero = false;
-                        s.push_back(digits[digit]);
+                    size = (sizeof(T) * 8 + 2) / 3;
+                    // remove leading zero 3-bits
+                    for (; !(0x07 & (arg >> (size * 3))); --size);
+                    do {
+                        s.push_back(digits[(arg >> (size * 3)) & 0x7]);
                     }
-                    if (size)
-                        s.push_back(digits[arg & ((1U << size) - 1)]);
+                    while (size--);
                 }
                 break;
             }
@@ -1078,12 +1072,17 @@ namespace vermils
                 else
                 {
                     size = sizeof(T) * 2;
-                    while (!(0x0f & (arg >> (--size * 4))))
-                        ;
-                    do
-                    {
+                    // remove leading zero half byte
+                    for (; !(0x0f & (arg >> (size * 4))); --size);
+                    auto fst_hbyte = b_lookup[(arg >> (size * 4)) & 0xF];
+                    // remove leading zeros for first half byte
+                    for(; *fst_hbyte == '0'; ++fst_hbyte);
+                    s.append(fst_hbyte);
+                    --size;
+                    do {
                         s.append(b_lookup[(arg >> (size * 4)) & 0xF]);
-                    } while (size--);
+                    }
+                    while (size--);
                 }
                 break;
             }
@@ -1122,7 +1121,7 @@ namespace vermils
         }
 
         template <typename T>
-        constexpr void compose(const HolderContainer &phs, StrContainer strs, uint_fast16_t &arg_index, T &&arg)
+        constexpr void compose(const HolderContainer &phs, StrContainer& strs, uint_fast16_t &arg_index, T &&arg)
         {
             size_t i = 0; // brace pair index
             for (auto &p : phs)
@@ -1138,18 +1137,18 @@ namespace vermils
                     continue; // skip if not current argument
                 }
 
-                strs[i++] = stringify(std::forward<T>(arg), p); // convert argument to string
+                strs.at(i++) = stringify(std::forward<T>(arg), p); // convert argument to string
             }
 
             ++arg_index; // update argument index for other compose calls
         }
 
         template <typename... T>
-        std::string format(const std::string_view src, T &&...args)
+        std::string format(std::size_t maxsize, const std::string_view src, T &&...args)
         {
             HolderContainer phs;
             std::string ret;
-            size_t maxsize = ret.max_size();
+            maxsize = std::min<size_t>(maxsize, ret.max_size());
             size_t opos = 0;             // position of current character in original string
             [[maybe_unused]]uint_fast16_t arg_index = 0; // index of current argument
             constexpr uint_fast16_t args_n = sizeof...(args);
@@ -1158,7 +1157,7 @@ namespace vermils
             size_t escape_count = parse(phs, src);
             size_t brace_pair_n = phs.size() - escape_count;
 
-            string strs[brace_pair_n];                                                                      // make sure there is enough space for all placeholders
+            StrContainer strs(brace_pair_n, string());                                                                // make sure there is enough space for all placeholders
             ret.reserve(std::min<size_t>(maxsize, src.length() + std::min<size_t>(256, brace_pair_n * 8))); // give a guess of the final size
 
             (compose(phs, strs, arg_index, std::forward<T>(args)), ...);
@@ -1196,53 +1195,9 @@ namespace vermils
         }
 
         template <typename... T>
-        std::string format(const std::size_t maxsize, const std::string_view src, T &&...args)
+        std::string format(const std::string_view src, T &&...args)
         {
-            HolderContainer phs;
-            std::string ret;
-            size_t opos = 0;             // position of current character in original string
-            [[maybe_unused]]uint_fast16_t arg_index = 0; // index of current argument
-            constexpr uint_fast16_t args_n = sizeof...(args);
-            phs.reserve(args_n + 2); // reserve extra 2 for possible escapes
-
-            size_t escape_count = parse(phs, src);
-            size_t brace_pair_n = phs.size() - escape_count;
-
-            string strs[brace_pair_n];                                                                      // make sure there is enough space for all placeholders
-            ret.reserve(std::min<size_t>(maxsize, src.length() + std::min<size_t>(256, brace_pair_n * 8))); // give a guess of the final size
-
-            (compose(phs, strs, arg_index, std::forward<T>(args)), ...);
-
-            size_t i = 0; // brace pair index
-            for (auto &p : phs)
-            {
-                if (ret.length() >= maxsize)
-                    break;
-
-                auto &s = strs[i];
-                auto size = std::min(maxsize - ret.length(), p.begin - opos);
-
-                ret.append(src, opos, size); // append string before placeholder
-                opos = p.end;                // update position of current character in original string
-
-                if (p.escape)
-                {
-                    ret.push_back('{');
-                    continue;
-                }
-
-                size = std::min(maxsize - ret.length(), s.length());
-                ret.append(s, 0, size); // append stringified argument
-                ++i;
-            }
-
-            if (ret.length() < maxsize)
-            {
-                auto size = std::min(maxsize - ret.length(), src.length() - opos);
-                ret.append(src, opos, size); // append string after last placeholder
-            }
-
-            return ret;
+            return format(std::numeric_limits<std::size_t>::max(), src, std::forward<T>(args)...);
         }
 
     }
