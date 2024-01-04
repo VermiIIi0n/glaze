@@ -1241,7 +1241,7 @@ namespace glz
       struct from_json<includer<T>>
       {
          template <auto Opts>
-         GLZ_ALWAYS_INLINE static void op(auto&& value, is_context auto&& ctx, auto&& it, auto&& end) noexcept
+         static void op(auto&& value, is_context auto&& ctx, auto&& it, auto&& end) noexcept
          {
             std::string& path = string_buffer();
             read<json>::op<Opts>(path, ctx, it, end);
@@ -2297,6 +2297,6 @@ namespace glz
          return {ec};
       }
 
-      return read<Opts>(value, buffer, ctx);
+      return read<set_json<Opts>()>(value, buffer, ctx);
    }
 }

@@ -48,7 +48,7 @@ namespace glz
    struct obj final
    {
       glz::tuplet::tuple<std::conditional_t<std::is_convertible_v<std::decay_t<T>, sv>, sv, T>...> value;
-      static constexpr auto reflect = false;
+      static constexpr auto glaze_reflect = false;
    };
 
    template <class... T>
@@ -58,7 +58,7 @@ namespace glz
    struct obj_copy final
    {
       glz::tuplet::tuple<T...> value;
-      static constexpr auto reflect = false;
+      static constexpr auto glaze_reflect = false;
    };
 
    template <class... T>
@@ -68,7 +68,7 @@ namespace glz
    struct arr final
    {
       glz::tuplet::tuple<std::conditional_t<std::is_convertible_v<std::decay_t<T>, sv>, sv, T>...> value;
-      static constexpr auto reflect = false;
+      static constexpr auto glaze_reflect = false;
    };
 
    template <class... T>
@@ -88,7 +88,7 @@ namespace glz
    struct merge final
    {
       glz::tuplet::tuple<std::conditional_t<std::is_convertible_v<std::decay_t<T>, sv>, sv, T>...> value;
-      static constexpr auto reflect = false;
+      static constexpr auto glaze_reflect = false;
    };
 
    template <class... T>
@@ -139,11 +139,16 @@ namespace glz
    };
 
    // Register this with an object to allow file including (direct writes) to the meta object
-   struct file_include
+   struct file_include final
    {
-      constexpr decltype(auto) operator()(auto&& value) const { return includer<std::decay_t<decltype(value)>>{value}; }
-
+      bool reflection_helper{}; // needed for count_members
       static constexpr auto glaze_includer = true;
+      static constexpr auto glaze_reflect = false;
+
+      constexpr decltype(auto) operator()(auto&& value) const noexcept
+      {
+         return includer<std::decay_t<decltype(value)>>{value};
+      }
    };
 
    template <class T>
@@ -471,7 +476,7 @@ namespace glz
       };
 
       template <class T>
-      concept is_no_reflect = requires(T t) { requires T::reflect == false; };
+      concept is_no_reflect = requires(T t) { requires T::glaze_reflect == false; };
 
       template <class T>
       concept is_dynamic_span = T::extent == static_cast<size_t>(-1);
@@ -966,7 +971,12 @@ namespace glz
             return std::invoke(std::forward<MemPtr>(member_ptr), std::forward<Value>(value));
          }
          else if constexpr (std::is_pointer_v<V>) {
-            return *member_ptr;
+            if constexpr (std::invocable<decltype(*member_ptr), Value>) {
+               return std::invoke(*member_ptr, std::forward<Value>(value));
+            }
+            else {
+               return *member_ptr;
+            }
          }
          else {
             return member_ptr;
