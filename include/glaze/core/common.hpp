@@ -130,6 +130,7 @@ namespace glz
       T& value;
 
       static constexpr auto glaze_includer = true;
+      static constexpr auto glaze_reflect = false;
    };
 
    template <class T>
@@ -152,7 +153,7 @@ namespace glz
    };
 
    template <class T>
-   concept is_includer = requires(T t) { T::glaze_includer; };
+   concept is_includer = requires(T t) { requires T::glaze_includer == true; };
 
    template <class T>
    concept range = requires(T& t) {
@@ -707,6 +708,32 @@ namespace glz
       }
 
       template <class T, size_t I>
+      constexpr sv get_enum_key() noexcept
+      {
+         constexpr auto first = get<0>(get<I>(meta_v<T>));
+         using T0 = std::decay_t<decltype(first)>;
+         if constexpr (std::is_enum_v<T0>) {
+            return get_name<first>();
+         }
+         else {
+            return {first};
+         }
+      }
+
+      template <class T, size_t I>
+      constexpr auto get_enum_value() noexcept
+      {
+         constexpr auto first = get<0>(get<I>(meta_v<T>));
+         using T0 = std::decay_t<decltype(first)>;
+         if constexpr (std::is_enum_v<T0>) {
+            return first;
+         }
+         else {
+            return get<1>(get<I>(meta_v<T>));
+         }
+      }
+
+      template <class T, size_t I>
       struct meta_sv
       {
          static constexpr sv value = get_key<T, I>();
@@ -769,7 +796,7 @@ namespace glz
          return make_map_impl<std::decay_t<T>, use_hash_comparison>(indices);
       }
 
-      template <class T, size_t... I>
+      /*template <class T, size_t... I>
       constexpr auto make_int_storage_impl(std::index_sequence<I...>)
       {
          using value_t = value_tuple_variant_t<meta_t<T>>;
@@ -781,13 +808,13 @@ namespace glz
       {
          constexpr auto indices = std::make_index_sequence<std::tuple_size_v<meta_t<T>>>{};
          return make_int_storage_impl<T>(indices);
-      }
+      }*/
 
       template <class T, size_t... I>
       constexpr auto make_key_int_map_impl(std::index_sequence<I...>)
       {
          return normal_map<sv, size_t, std::tuple_size_v<meta_t<T>>>(
-            {std::make_pair<sv, size_t>(glz::get<0>(glz::get<I>(meta_v<T>)), I)...});
+            {std::make_pair<sv, size_t>(get_enum_key<T, I>(), I)...});
       }
 
       template <class T>
@@ -801,8 +828,8 @@ namespace glz
       constexpr auto make_enum_to_string_map_impl(std::index_sequence<I...>)
       {
          using key_t = std::underlying_type_t<T>;
-         return normal_map<key_t, sv, std::tuple_size_v<meta_t<T>>>({std::make_pair<key_t, sv>(
-            static_cast<key_t>(glz::get<1>(glz::get<I>(meta_v<T>))), sv(glz::get<0>(glz::get<I>(meta_v<T>))))...});
+         return normal_map<key_t, sv, std::tuple_size_v<meta_t<T>>>(
+            {std::make_pair<key_t, sv>(static_cast<key_t>(get_enum_value<T, I>()), get_enum_key<T, I>())...});
       }
 
       template <class T>
@@ -817,16 +844,15 @@ namespace glz
       constexpr auto make_enum_to_string_array()
       {
          std::array<sv, std::tuple_size_v<meta_t<T>>> arr;
-         for_each<std::tuple_size_v<meta_t<T>>>(
-            [&](auto I) { arr[I] = enum_name_v<static_cast<T>(decltype(I)::value)>; });
+         for_each<std::tuple_size_v<meta_t<T>>>([&](auto I) { arr[I] = get_enum_key<T, I>(); });
          return arr;
       }
 
       template <class T, size_t... I>
       constexpr auto make_string_to_enum_map_impl(std::index_sequence<I...>)
       {
-         return normal_map<sv, T, std::tuple_size_v<meta_t<T>>>({std::make_pair<sv, T>(
-            sv(glz::get<0>(glz::get<I>(meta_v<T>))), T(glz::get<1>(glz::get<I>(meta_v<T>))))...});
+         return normal_map<sv, T, std::tuple_size_v<meta_t<T>>>(
+            {std::make_pair<sv, T>(get_enum_key<T, I>(), T(get_enum_value<T, I>()))...});
       }
 
       template <class T>
@@ -1037,21 +1063,6 @@ namespace glz
       {};
       template <class T>
       array_variant(T) -> array_variant<T>; // Only needed on older compilers until we move to template alias deduction
-
-      template <class T, auto Opts>
-      constexpr auto required_fields()
-      {
-         constexpr auto n = std::tuple_size_v<meta_t<T>>;
-         bit_array<n> fields{};
-         if constexpr (Opts.error_on_missing_keys) {
-            for_each<n>([&](auto I) constexpr {
-               fields[I] =
-                  !bool(Opts.skip_null_members) ||
-                  !null_t<std::decay_t<member_t<T, std::tuple_element_t<1, std::tuple_element_t<I, meta_t<T>>>>>>;
-            });
-         }
-         return fields;
-      }
    } // namespace detail
 
    constexpr decltype(auto) conv_sv(auto&& value) noexcept
@@ -1151,6 +1162,20 @@ struct glz::meta<glz::error_code>
 
 namespace glz
 {
+   template <auto Enum>
+      requires(std::is_enum_v<decltype(Enum)>)
+   constexpr sv enum_name_v = []() -> std::string_view {
+      using T = std::decay_t<decltype(Enum)>;
+
+      if constexpr (detail::glaze_t<T>) {
+         using U = std::underlying_type_t<T>;
+         return detail::get_enum_key<T, static_cast<U>(Enum)>();
+      }
+      else {
+         return "glz::unknown";
+      }
+   }();
+
    [[nodiscard]] inline std::string format_error(const parse_error& pe, const auto& buffer)
    {
       static constexpr auto arr = detail::make_enum_to_string_array<error_code>();
@@ -1264,4 +1289,26 @@ namespace glz::detail
          }
       }
    }();
+
+   template <class T, auto Opts>
+   constexpr auto required_fields()
+   {
+      constexpr auto N = [] {
+         if constexpr (reflectable<T>) {
+            return count_members<T>;
+         }
+         else {
+            return std::tuple_size_v<meta_t<T>>;
+         }
+      }();
+
+      bit_array<N> fields{};
+      if constexpr (Opts.error_on_missing_keys) {
+         for_each<N>([&](auto I) constexpr {
+            using Element = glaze_tuple_element<I, N, T>;
+            fields[I] = !bool(Opts.skip_null_members) || !null_t<std::decay_t<typename Element::type>>;
+         });
+      }
+      return fields;
+   }
 }

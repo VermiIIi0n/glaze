@@ -564,6 +564,8 @@ struct glz::meta<includer_struct>
    static constexpr auto value = object("#include", glz::file_include{}, "str", &T::str, "i", &T::i, "j", &T::j);
 };
 
+static_assert(glz::is_includer<glz::includer<includer_struct>>);
+
 void file_include_test()
 {
    includer_struct obj{};
@@ -1399,6 +1401,45 @@ suite my_struct_without_keys_test = [] {
       expect(obj.hello == "happy");
    };
 };
+
+namespace variants
+{
+   struct A
+   {
+      uint8_t a;
+   };
+
+   struct A1
+   {
+      std::map<uint8_t, uint64_t> a;
+   };
+
+   struct B
+   {
+      uint8_t b;
+      A1 a;
+   };
+
+   struct C
+   {
+      bool is_a;
+      std::map<uint8_t, std::variant<A, B>> a;
+   };
+
+   class D
+   {
+     public:
+      C c;
+   };
+
+   suite variants = [] {
+      "variants"_test = [] {
+         std::vector<uint8_t> out;
+         D d{};
+         glz::write<glz::opts{.format = glz::binary, .structs_as_arrays = true}>(d, out); // testing compilation
+      };
+   };
+}
 
 int main()
 {

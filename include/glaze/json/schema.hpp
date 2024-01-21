@@ -199,11 +199,15 @@ namespace glz
             // });
             s.oneOf = std::vector<schematic>(N);
             for_each<N>([&](auto I) {
-               static constexpr auto item = glz::get<I>(meta_v<V>);
+               static constexpr auto item = get<I>(meta_v<V>);
+               using T0 = std::decay_t<decltype(get<0>(item))>;
                auto& enumeration = (*s.oneOf)[I.value];
-               enumeration.constant = glz::get<0>(item);
-               if constexpr (std::tuple_size_v < decltype(item) >> 2) {
-                  enumeration.description = std::get<2>(item);
+               enumeration.constant = get_enum_key<V, I>();
+               static constexpr size_t member_index = std::is_enum_v<T0> ? 0 : 1;
+               static constexpr size_t comment_index = member_index + 1;
+               constexpr auto Size = std::tuple_size_v<decltype(item)>;
+               if constexpr (Size > comment_index) {
+                  enumeration.description = get<comment_index>(item);
                }
             });
          }
@@ -305,7 +309,8 @@ namespace glz
          }
       };
 
-      template <glaze_object_t T>
+      template <class T>
+         requires(glaze_object_t<T> || reflectable<T>)
       struct to_json_schema<T>
       {
          template <auto Opts>
@@ -323,25 +328,32 @@ namespace glz
                s.examples = meta<V>::examples;
             }
 
-            static constexpr auto N = std::tuple_size_v<meta_t<V>>;
-            s.properties = std::map<std::string_view, schema, std::less<>>();
+            static constexpr auto N = [] {
+               if constexpr (reflectable<T>) {
+                  return count_members<T>;
+               }
+               else {
+                  return std::tuple_size_v<meta_t<T>>;
+               }
+            }();
+            s.properties = std::map<sv, schema, std::less<>>();
             for_each<N>([&](auto I) {
-               static constexpr auto item = get<I>(meta_v<V>);
-               using T0 = std::decay_t<decltype(get<0>(item))>;
-               static constexpr auto use_reflection = std::is_member_object_pointer_v<T0>;
-               static constexpr auto member_index = use_reflection ? 0 : 1;
-               using mptr_t = decltype(get<member_index>(item));
-               using val_t = std::decay_t<member_t<V, mptr_t>>;
+               using Element = glaze_tuple_element<I, N, T>;
+               static constexpr size_t member_index = Element::member_index;
+               using val_t = std::decay_t<typename Element::type>;
+
                auto& def = defs[name_v<val_t>];
                if (!def.type) {
                   to_json_schema<val_t>::template op<Opts>(def, defs);
                }
                auto ref_val = schema{join_v<chars<"#/$defs/">, name_v<val_t>>};
-               static constexpr auto Size = std::tuple_size_v<decltype(item)>;
-               static constexpr auto comment_index = member_index + 1;
-               if constexpr (Size > comment_index) {
+               static constexpr size_t comment_index = member_index + 1;
+               static constexpr auto Size = std::tuple_size_v<typename Element::Item>;
+
+               if constexpr (Size > comment_index && glaze_object_t<T>) {
+                  static constexpr auto item = glz::get<I>(meta_v<V>);
                   using additional_data_type = decltype(get<comment_index>(item));
-                  if constexpr (std::is_convertible_v<additional_data_type, std::string_view>) {
+                  if constexpr (std::is_convertible_v<additional_data_type, sv>) {
                      ref_val.description = get<comment_index>(item);
                   }
                   else if constexpr (std::is_convertible_v<additional_data_type, schema>) {
@@ -349,12 +361,9 @@ namespace glz
                      ref_val.ref = join_v<chars<"#/$defs/">, name_v<val_t>>;
                   }
                }
-               if constexpr (use_reflection) {
-                  (*s.properties)[get_name<get<0>(item)>()] = ref_val;
-               }
-               else {
-                  (*s.properties)[get<0>(item)] = ref_val;
-               }
+
+               constexpr sv key = key_name<I, T, Element::use_reflection>;
+               (*s.properties)[key] = ref_val;
             });
             s.additionalProperties = false;
          }
@@ -368,17 +377,14 @@ namespace glz
       detail::schematic s{};
       s.defs.emplace();
       detail::to_json_schema<std::decay_t<T>>::template op<opts{}>(s, *s.defs);
-      write<opts{}>(std::move(s), std::forward<Buffer>(buffer));
+      write<opts{.write_type_info = false}>(std::move(s), std::forward<Buffer>(buffer));
    }
 
    template <class T>
-   inline auto write_json_schema() noexcept
+   [[nodiscard]] inline auto write_json_schema() noexcept
    {
       std::string buffer{};
-      detail::schematic s{};
-      s.defs.emplace();
-      detail::to_json_schema<std::decay_t<T>>::template op<opts{}>(s, *s.defs);
-      write<opts{.write_type_info = false}>(std::move(s), buffer);
+      write_json_schema<T>(buffer);
       return buffer;
    }
 }
