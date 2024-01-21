@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <string>
+
 #include "glaze/util/ffmt.hpp"
 
 namespace glz
@@ -60,11 +61,11 @@ namespace glz
                         one_or_completed,                                                   //
                         one_or_total);*/
          s += vermils::ffmt::format(" {}% | ETA: {}m {}s | {}/{}", //
-                          std::round(percentage), //
-                          minutes, //
-                          seconds, //
-                          one_or_completed,                                                   //
-                          one_or_total);
+                                    std::round(percentage), //
+                                    minutes, //
+                                    seconds, //
+                                    one_or_completed, //
+                                    one_or_total);
          return s;
       }
    };
